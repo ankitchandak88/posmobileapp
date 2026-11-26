@@ -38,7 +38,7 @@ class StockCountScreen extends ConsumerStatefulWidget {
 }
 
 class _StockCountScreenState extends ConsumerState<StockCountScreen> {
-  num _physicalQty = 0;
+  num? _physicalQty;
   final _remarksController = TextEditingController();
   final _batchController = TextEditingController();
   final _dateController = TextEditingController();
@@ -140,10 +140,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
 
   void _addQty(num delta) {
     HapticFeedback.selectionClick();
-    setState(() => _physicalQty += delta);
+    setState(() => _physicalQty = (_physicalQty ?? 0) + delta);
   }
 
-  void _setQty(num val) {
+  void _setQty(num? val) {
     HapticFeedback.selectionClick();
     setState(() => _physicalQty = val);
   }
@@ -277,6 +277,16 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   }
 
   Future<void> _saveAndNext({required bool nextScan}) async {
+    if (_physicalQty == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter counted quantity before saving.'),
+          backgroundColor: AppColors.critical,
+        ),
+      );
+      return;
+    }
+
     final rawDate = _dateController.text.trim();
     if (rawDate.isNotEmpty) {
       final parsed = _parseManualDate(rawDate);
@@ -310,7 +320,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
       branchId: branchId,
       batchNo: batchText.isNotEmpty ? batchText : widget.batch?.batchNo,
       expDateObserved: _expDate,
-      physicalQty: _physicalQty,
+      physicalQty: _physicalQty!,
       remarks: _remarksController.text.trim().isEmpty
           ? null
           : _remarksController.text.trim(),
@@ -339,7 +349,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Stock & Expiry Check'),
+        title: const Text('Stock Count'),
         actions: [
           // Compact Blind Count Mode Badge
           Container(
@@ -456,7 +466,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         _QuickQtyChip(
                           label: 'Reset',
                           isReset: true,
-                          onTap: () => _setQty(0),
+                          onTap: () => _setQty(null),
                         ),
                       ],
                     ),

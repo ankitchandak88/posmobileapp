@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../../core/network/api_exception.dart';
+import '../../../../core/services/beep_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -80,8 +81,7 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen>
 
   Future<void> _handleCode(String code) async {
     if (_processing) return;
-    HapticFeedback.mediumImpact();
-    SystemSound.play(SystemSoundType.alert);
+    await BeepService.playScanBeep();
     setState(() {
       _processing = true;
       _lastError = null;
@@ -154,13 +154,15 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen>
   Widget build(BuildContext context) {
     final title = widget.mode == 'expiry_check'
         ? 'Scan — Expiry Check'
-        : (widget.mode == 'purchase'
-              ? 'Scan — Purchase Lookup'
-              : (widget.mode == 'view'
-                    ? 'Scan — Item View'
-                    : (widget.mode == 'inward'
-                          ? 'Scan — Inward Stock'
-                          : 'Scan — Stock & Expiry')));
+        : (widget.mode == 'stock_count'
+              ? 'Scan — Stock Count'
+              : (widget.mode == 'purchase'
+                    ? 'Scan — Purchase Lookup'
+                    : (widget.mode == 'view'
+                          ? 'Scan — Item View'
+                          : (widget.mode == 'inward'
+                                ? 'Scan — Inward Stock'
+                                : 'Scan Barcode'))));
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(

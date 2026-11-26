@@ -132,6 +132,9 @@ void main() {
         observations: repo,
       );
 
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
       await tester.tap(find.text('Save & Finish'));
       await tester.pumpAndSettle();
       expect(find.textContaining('ROUTE:/submission-confirmation'), findsOne);
@@ -148,6 +151,9 @@ void main() {
         user: staffUser,
         observations: repo,
       );
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
 
       await tester.tap(find.text('Save & Next Scan'));
       await tester.pump();
@@ -176,10 +182,13 @@ void main() {
         observations: repo,
       );
 
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
       await tester.tap(find.text('Save & Next Scan'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Network error'), findsOneWidget);
-      expect(find.text('Stock & Expiry Check'), findsOneWidget); // still here
+      expect(find.text('Stock Count'), findsOneWidget); // still here
 
       repo.submitError = null;
       await tester.tap(find.text('Save & Next Scan'));
@@ -191,6 +200,28 @@ void main() {
         repo.submitCalls[0].idempotencyKey,
       );
       expect(find.textContaining('ROUTE:/scanner'), findsOneWidget);
+    });
+
+    testWidgets('quantity is blank by default and validation blocks empty submission', (tester) async {
+      useTallViewport(tester);
+      final repo = FakeObservationRepository();
+      await pumpScreen(
+        tester,
+        StockCountScreen(item: item),
+        user: staffUser,
+        observations: repo,
+      );
+
+      // Verify blank by default
+      expect(find.text('—'), findsOneWidget);
+      expect(find.text('Stock Count'), findsOneWidget);
+
+      // Attempt to save without entering quantity
+      await tester.tap(find.text('Save & Finish'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Please enter counted quantity before saving.'), findsOneWidget);
+      expect(repo.submitCalls, isEmpty);
     });
   });
 

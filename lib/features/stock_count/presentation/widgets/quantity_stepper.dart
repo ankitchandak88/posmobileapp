@@ -12,8 +12,8 @@ class QuantityStepper extends StatefulWidget {
     this.unit = 'units',
   });
 
-  final num value;
-  final ValueChanged<num> onChanged;
+  final num? value;
+  final ValueChanged<num?> onChanged;
   final String unit;
 
   @override
@@ -34,7 +34,7 @@ class _QuantityStepperState extends State<QuantityStepper> {
   void didUpdateWidget(QuantityStepper oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
-      final currentParsed = num.tryParse(_controller.text);
+      final currentParsed = num.tryParse(_controller.text.trim());
       if (currentParsed != widget.value) {
         _controller.text = _formatValue(widget.value);
       }
@@ -48,12 +48,18 @@ class _QuantityStepperState extends State<QuantityStepper> {
     super.dispose();
   }
 
-  String _formatValue(num val) {
+  String _formatValue(num? val) {
+    if (val == null) return '';
     return val % 1 == 0 ? val.toInt().toString() : val.toString();
   }
 
   void _onTextSubmitted(String text) {
-    final parsed = num.tryParse(text.trim());
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      widget.onChanged(null);
+      return;
+    }
+    final parsed = num.tryParse(trimmed);
     if (parsed != null && parsed >= 0) {
       widget.onChanged(parsed);
     } else {
@@ -78,8 +84,11 @@ class _QuantityStepperState extends State<QuantityStepper> {
           _StepButton(
             icon: Icons.remove,
             onTap: () {
-              final next = widget.value > 0 ? widget.value - 1 : 0;
-              widget.onChanged(next);
+              if (widget.value == null || widget.value! <= 1) {
+                widget.onChanged(0);
+              } else {
+                widget.onChanged(widget.value! - 1);
+              }
             },
           ),
           Expanded(
@@ -98,6 +107,12 @@ class _QuantityStepperState extends State<QuantityStepper> {
                       color: AppColors.textPrimary,
                     ),
                     decoration: const InputDecoration(
+                      hintText: '—',
+                      hintStyle: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.textMuted,
+                      ),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 2),
@@ -106,9 +121,14 @@ class _QuantityStepperState extends State<QuantityStepper> {
                       FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                     ],
                     onChanged: (text) {
-                      final parsed = num.tryParse(text.trim());
-                      if (parsed != null) {
-                        widget.onChanged(parsed);
+                      final trimmed = text.trim();
+                      if (trimmed.isEmpty) {
+                        widget.onChanged(null);
+                      } else {
+                        final parsed = num.tryParse(trimmed);
+                        if (parsed != null) {
+                          widget.onChanged(parsed);
+                        }
                       }
                     },
                     onSubmitted: _onTextSubmitted,
@@ -127,7 +147,11 @@ class _QuantityStepperState extends State<QuantityStepper> {
           _StepButton(
             icon: Icons.add,
             onTap: () {
-              widget.onChanged(widget.value + 1);
+              if (widget.value == null) {
+                widget.onChanged(1);
+              } else {
+                widget.onChanged(widget.value! + 1);
+              }
             },
           ),
         ],

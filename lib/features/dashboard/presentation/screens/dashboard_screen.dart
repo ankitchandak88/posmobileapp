@@ -267,21 +267,31 @@ class DashboardScreen extends ConsumerWidget {
                       childAspectRatio: 1.45,
                       children: [
                         _DashboardTile(
-                          label: 'Supplier Inward',
-                          subtitle: 'Receive & add stock',
-                          icon: Icons.local_shipping_rounded,
-                          color: AppColors.primaryBlue,
-                          onTap: () => context.push('/inward-entry'),
-                        ),
-                        _DashboardTile(
-                          label: 'Stock & Expiry Check',
-                          subtitle: 'Scan count & expiry',
-                          icon: Icons.checklist_rtl_rounded,
+                          label: 'Stock Count',
+                          subtitle: 'Scan & count physical stock',
+                          icon: Icons.inventory_2_rounded,
                           color: AppColors.primaryBlue,
                           onTap: () => context.push(
                             '/scanner',
                             extra: {'mode': 'stock_count'},
                           ),
+                        ),
+                        _DashboardTile(
+                          label: 'Expiry Check',
+                          subtitle: 'Scan & verify expiry dates',
+                          icon: Icons.event_available_rounded,
+                          color: AppColors.primaryBlue,
+                          onTap: () => context.push(
+                            '/scanner',
+                            extra: {'mode': 'expiry_check'},
+                          ),
+                        ),
+                        _DashboardTile(
+                          label: 'Supplier Inward',
+                          subtitle: 'Receive & add stock',
+                          icon: Icons.local_shipping_rounded,
+                          color: AppColors.primaryBlue,
+                          onTap: () => context.push('/inward-entry'),
                         ),
                         _DashboardTile(
                           label: 'Quick Item View',

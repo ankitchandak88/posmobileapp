@@ -648,7 +648,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
                     const SizedBox(height: 8),
                     QuantityStepper(
                       value: _inwardQty,
-                      onChanged: (v) => setState(() => _inwardQty = v > 0 ? v : 1),
+                      onChanged: (v) => setState(() => _inwardQty = (v != null && v > 0) ? v : 1),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     SingleChildScrollView(
