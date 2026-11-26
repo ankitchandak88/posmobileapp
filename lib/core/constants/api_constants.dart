@@ -77,6 +77,8 @@ class ApiConstants {
 
   // Purchases
   static String purchaseItemLookup(String code) => '/purchases/item-lookup/$code';
+  static const String purchaseOrders = '/purchase-orders';
+  static String purchaseOrderDetail(String id) => '/purchase-orders/$id';
 
   // Rider endpoints (Indian-Pet-Company CRM)
   static const String riderOrders = '/orders';

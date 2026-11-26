@@ -13,22 +13,27 @@ import '../../../auth/state/auth_providers.dart';
 import '../../../dashboard/state/dashboard_providers.dart';
 import '../../../stock_count/presentation/widgets/quantity_stepper.dart';
 import '../../../stock_count/state/stock_count_providers.dart';
+import '../../data/purchase_order_model.dart';
 import '../../state/purchase_providers.dart';
 
 /// Inward / Supplier Stock Entry Screen:
-/// 1. Staff selects Supplier (searchable list)
+/// Option 1: PO-Linked Inward (Purchase Order -> GRN / Physical Verification)
+/// 1. Staff selects Open Purchase Order (or direct vendor for ad-hoc)
 /// 2. Staff scans product barcode or searches product
-/// 3. Staff adds inward quantity + observed expiry date (+ optional batch)
-/// 4. Submits for approval in Web POS (pos.indianpetcompany.com)
+/// 3. App auto-matches with PO item, shows ordered qty & alerts (excess/shortage)
+/// 4. Staff adds inward quantity + observed expiry date (+ optional batch)
+/// 5. Submits for approval in Web POS with PO reference
 class InwardEntryScreen extends ConsumerStatefulWidget {
   const InwardEntryScreen({
     super.key,
     this.initialSupplier,
+    this.initialPO,
     this.item,
     this.batch,
   });
 
   final SupplierModel? initialSupplier;
+  final PurchaseOrderModel? initialPO;
   final ItemModel? item;
   final BatchModel? batch;
 
@@ -37,9 +42,12 @@ class InwardEntryScreen extends ConsumerStatefulWidget {
 }
 
 class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
+  PurchaseOrderModel? _selectedPO;
   SupplierModel? _selectedSupplier;
   ItemModel? _currentItem;
   BatchModel? _currentBatch;
+
+  final Set<String> _inwardedPoItemIds = {};
 
   num? _inwardQty;
   final _batchController = TextEditingController();
@@ -52,7 +60,17 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedSupplier = widget.initialSupplier ?? ref.read(selectedSupplierProvider);
+    _selectedPO = widget.initialPO ?? ref.read(selectedPurchaseOrderProvider);
+    if (_selectedPO != null) {
+      _selectedSupplier = SupplierModel(
+        id: _selectedPO!.supplierId,
+        name: _selectedPO!.supplierName,
+        phone: _selectedPO!.supplierPhone,
+      );
+    } else {
+      _selectedSupplier = widget.initialSupplier ?? ref.read(selectedSupplierProvider);
+    }
+
     _currentItem = widget.item;
     _currentBatch = widget.batch;
 
@@ -71,6 +89,25 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
     _dateController.dispose();
     _remarksController.dispose();
     super.dispose();
+  }
+
+  /// Finds matching PO item from the selected Purchase Order
+  PurchaseOrderItemModel? get _matchedPoItem {
+    if (_selectedPO == null || _currentItem == null) return null;
+    for (final poItem in _selectedPO!.items) {
+      if (poItem.itemId == _currentItem!.id) return poItem;
+      if (poItem.barcode != null &&
+          poItem.barcode!.isNotEmpty &&
+          (poItem.barcode == _currentItem!.sku || poItem.barcode == _currentItem!.barcode)) {
+        return poItem;
+      }
+      if (poItem.itemCode != null &&
+          poItem.itemCode!.isNotEmpty &&
+          (poItem.itemCode == _currentItem!.sku || poItem.itemCode == _currentItem!.barcode)) {
+        return poItem;
+      }
+    }
+    return null;
   }
 
   String _formatDisplayDate(DateTime dt) {
@@ -211,7 +248,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
                 autofocus: true,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  hintText: 'Invoice no, PO ref, supplier batch condition…',
+                  hintText: 'Invoice no, delivery challan, condition…',
                   hintStyle: AppTextStyles.captionMuted,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
@@ -234,6 +271,33 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
     );
   }
 
+  void _showPurchaseOrderPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _PurchaseOrderPickerSheet(
+        selectedSupplierId: _selectedSupplier?.id,
+        onSelected: (po) {
+          setState(() {
+            _selectedPO = po;
+            _selectedSupplier = SupplierModel(
+              id: po.supplierId,
+              name: po.supplierName,
+              phone: po.supplierPhone,
+            );
+          });
+          ref.read(selectedPurchaseOrderProvider.notifier).state = po;
+          ref.read(selectedSupplierProvider.notifier).state = _selectedSupplier;
+          Navigator.pop(ctx);
+        },
+      ),
+    );
+  }
+
   void _showSupplierPicker() {
     showModalBottomSheet(
       context: context,
@@ -246,23 +310,58 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
         onSelected: (supplier) {
           setState(() {
             _selectedSupplier = supplier;
+            _selectedPO = null;
           });
           ref.read(selectedSupplierProvider.notifier).state = supplier;
+          ref.read(selectedPurchaseOrderProvider.notifier).state = null;
           Navigator.pop(ctx);
         },
       ),
     );
   }
 
+  void _showPoItemsChecklist() {
+    if (_selectedPO == null) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _PoItemsChecklistSheet(
+        po: _selectedPO!,
+        inwardedItemIds: _inwardedPoItemIds,
+        onItemSelected: (poItem) {
+          Navigator.pop(ctx);
+          setState(() {
+            _currentItem = ItemModel(
+              id: poItem.itemId,
+              name: poItem.name,
+              sku: poItem.itemCode ?? poItem.barcode ?? '',
+              barcode: poItem.barcode,
+              mrp: poItem.mrp,
+            );
+            _inwardQty = null;
+            _batchController.clear();
+            _dateController.clear();
+            _expDate = null;
+            _dateParseError = null;
+          });
+        },
+      ),
+    );
+  }
+
   Future<void> _scanBarcode() async {
-    if (_selectedSupplier == null) {
+    if (_selectedSupplier == null && _selectedPO == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select a supplier first.'),
+          content: Text('Please select a Purchase Order or Supplier first.'),
           backgroundColor: AppColors.warning,
         ),
       );
-      _showSupplierPicker();
+      _showPurchaseOrderPicker();
       return;
     }
 
@@ -284,14 +383,14 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
   }
 
   Future<void> _searchProduct() async {
-    if (_selectedSupplier == null) {
+    if (_selectedSupplier == null && _selectedPO == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select a supplier first.'),
+          content: Text('Please select a Purchase Order or Supplier first.'),
           backgroundColor: AppColors.warning,
         ),
       );
-      _showSupplierPicker();
+      _showPurchaseOrderPicker();
       return;
     }
 
@@ -313,14 +412,14 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
   }
 
   Future<void> _submitInward({required bool nextItem}) async {
-    if (_selectedSupplier == null) {
+    if (_selectedSupplier == null && _selectedPO == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select a supplier.'),
+          content: Text('Please select a Purchase Order or Supplier.'),
           backgroundColor: AppColors.critical,
         ),
       );
-      _showSupplierPicker();
+      _showPurchaseOrderPicker();
       return;
     }
 
@@ -367,22 +466,29 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
         (branches != null && branches.isNotEmpty ? branches.first.id : '1');
     final batchText = _batchController.text.trim();
 
+    final supplierId = _selectedSupplier?.id ?? _selectedPO?.supplierId ?? '1';
+
+    // Auto-prefix PO reference in remarks
+    final poPrefix = _selectedPO != null ? '[PO: ${_selectedPO!.poNumber}] ' : '';
+    final rawRemarks = _remarksController.text.trim();
+    final combinedRemarks = '$poPrefix$rawRemarks'.trim();
+
     final result = await controller.submit(
       type: 'stock_count',
       itemId: _currentItem!.id,
       branchId: branchId,
-      supplierId: _selectedSupplier!.id,
+      supplierId: supplierId,
       batchNo: batchText.isNotEmpty ? batchText : _currentBatch?.batchNo,
       expDateObserved: _expDate,
       physicalQty: _inwardQty!,
-      remarks: _remarksController.text.trim().isEmpty
-          ? null
-          : _remarksController.text.trim(),
+      remarks: combinedRemarks.isEmpty ? null : combinedRemarks,
       photoPath: _photoPath,
     );
 
     if (!mounted) return;
     if (result != null) {
+      _inwardedPoItemIds.add(_currentItem!.id);
+
       if (nextItem) {
         setState(() {
           _currentItem = null;
@@ -396,13 +502,19 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
           _dateParseError = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Item submitted for approval! Scan next item.'),
+          SnackBar(
+            content: Text(
+              _selectedPO != null
+                  ? 'Item inwarded for ${_selectedPO!.poNumber}! Scan next item.'
+                  : 'Item submitted for approval! Scan next item.',
+            ),
             backgroundColor: AppColors.success,
           ),
         );
       } else {
+        ref.read(selectedPurchaseOrderProvider.notifier).state = null;
         ref.read(selectedSupplierProvider.notifier).state = null;
+        _selectedPO = null;
         _selectedSupplier = null;
         context.pushReplacement(
           '/submission-confirmation',
@@ -419,467 +531,1191 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
   Widget build(BuildContext context) {
     final submission = ref.watch(observationSubmissionProvider);
     final isSubmitting = submission.status == SubmissionStatus.submitting;
+    final matchedPo = _matchedPoItem;
 
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
+          ref.read(selectedPurchaseOrderProvider.notifier).state = null;
           ref.read(selectedSupplierProvider.notifier).state = null;
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Inward / Supplier Stock'),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: AppSpacing.md),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.successBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.success.withValues(alpha: 0.3),
+        appBar: AppBar(
+          title: const Text('Inward / Stock Receive'),
+          actions: [
+            Container(
+              margin: const EdgeInsets.only(right: AppSpacing.md),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _selectedPO != null
+                    ? AppColors.primaryBlue.withValues(alpha: 0.12)
+                    : AppColors.successBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _selectedPO != null
+                      ? AppColors.primaryBlueLight
+                      : AppColors.success.withValues(alpha: 0.3),
+                ),
               ),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.verified_outlined,
-                  color: AppColors.success,
-                  size: 13,
-                ),
-                SizedBox(width: 4),
-                Text(
-                  'Web Approval Mode',
-                  style: TextStyle(
-                    color: AppColors.success,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // STEP 1: Supplier Selector Card
-            AppCard(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.local_shipping_rounded,
-                            size: 16,
-                            color: AppColors.primaryBlue,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Step 1: Supplier / Vendor',
-                            style: AppTextStyles.label.copyWith(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                      if (_selectedSupplier != null) ...[
-                        TextButton(
-                          onPressed: _showSupplierPicker,
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(50, 24),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text('Change', style: TextStyle(fontSize: 12)),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _selectedSupplier = null;
-                            });
-                            ref.read(selectedSupplierProvider.notifier).state = null;
-                          },
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(40, 24),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text(
-                            'Clear',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.critical,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  Icon(
+                    _selectedPO != null ? Icons.receipt_long_rounded : Icons.verified_outlined,
+                    color: _selectedPO != null ? AppColors.primaryBlue : AppColors.success,
+                    size: 13,
                   ),
-                  const SizedBox(height: 8),
-                  if (_selectedSupplier == null)
-                    InkWell(
-                      onTap: _showSupplierPicker,
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceAlt,
-                          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                          border: Border.all(color: AppColors.primaryBlueLight),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search, size: 18, color: AppColors.primaryBlue),
-                            SizedBox(width: 8),
-                            Text(
-                              'Tap to Select Supplier (Required)',
-                              style: TextStyle(
-                                color: AppColors.primaryBlue,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryBlue.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.business_rounded,
-                            color: AppColors.primaryBlue,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedSupplier!.name,
-                                style: AppTextStyles.bodyStrong.copyWith(fontSize: 15),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (_selectedSupplier!.mobile != null || _selectedSupplier!.phone != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  _selectedSupplier!.mobile ?? _selectedSupplier!.phone ?? '',
-                                  style: AppTextStyles.captionMuted.copyWith(fontSize: 11),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
+                  const SizedBox(width: 4),
+                  Text(
+                    _selectedPO != null ? 'PO-Linked Mode' : 'Web Approval Mode',
+                    style: TextStyle(
+                      color: _selectedPO != null ? AppColors.primaryBlue : AppColors.success,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
                     ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-
-            // STEP 2: Product Barcode Scan / Lookup
-            if (_currentItem == null)
-              AppCard(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.qr_code_scanner_rounded,
-                      size: 40,
-                      color: AppColors.primaryBlue,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Step 2: Scan Product Barcode',
-                      style: AppTextStyles.h3.copyWith(fontSize: 15),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Scan product or search item to add inward quantity and expiry date.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    AppButton(
-                      label: 'Scan Product Barcode',
-                      icon: Icons.qr_code_scanner,
-                      onPressed: _scanBarcode,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    AppButton(
-                      label: 'Search Product Manually',
-                      variant: AppButtonVariant.secondary,
-                      icon: Icons.search,
-                      onPressed: _searchProduct,
-                    ),
-                  ],
-                ),
-              )
-            else ...[
-              // Product Card
-              AppCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _currentItem!.name,
-                            style: AppTextStyles.bodyStrong.copyWith(fontSize: 15),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'SKU: ${_currentItem!.sku} · MRP: ₹${_currentItem!.mrp ?? '-'}',
-                            style: AppTextStyles.captionMuted.copyWith(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => setState(() => _currentItem = null),
-                      child: const Text('Change', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-
-              // Inward Quantity Stepper Card
-              AppCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: 12,
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Inward Quantity (Stock Arrived)',
-                      style: AppTextStyles.label.copyWith(fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    QuantityStepper(
-                      value: _inwardQty,
-                      onChanged: (v) => setState(() => _inwardQty = v),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _QuickQtyChip(label: '+1', onTap: () => _addQty(1)),
-                          const SizedBox(width: 8),
-                          _QuickQtyChip(label: '+5', onTap: () => _addQty(5)),
-                          const SizedBox(width: 8),
-                          _QuickQtyChip(label: '+10', onTap: () => _addQty(10)),
-                          const SizedBox(width: 8),
-                          _QuickQtyChip(
-                            label: 'Reset',
-                            isReset: true,
-                            onTap: () => _setQty(null),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-
-              // Batch & Expiry Card
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // STEP 1: PO / Supplier Card
               AppCard(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(
-                          Icons.event_available_rounded,
-                          size: 16,
-                          color: AppColors.primaryBlue,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Icon(
+                                _selectedPO != null
+                                    ? Icons.receipt_long_rounded
+                                    : Icons.local_shipping_rounded,
+                                size: 16,
+                                color: AppColors.primaryBlue,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _selectedPO != null
+                                      ? 'Step 1: Purchase Order'
+                                      : 'Step 1: PO / Supplier',
+                                  style: AppTextStyles.label.copyWith(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Batch & Expiry Date (Optional)',
-                          style: AppTextStyles.label.copyWith(fontSize: 12),
-                        ),
+                        if (_selectedPO != null || _selectedSupplier != null) ...[
+                          TextButton(
+                            onPressed: _showPurchaseOrderPicker,
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(50, 24),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text('Change PO', style: TextStyle(fontSize: 12)),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedPO = null;
+                                _selectedSupplier = null;
+                                _inwardedPoItemIds.clear();
+                              });
+                              ref.read(selectedPurchaseOrderProvider.notifier).state = null;
+                              ref.read(selectedSupplierProvider.notifier).state = null;
+                            },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(40, 24),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Clear',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.critical,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: _batchController,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        labelText: 'Batch Number (Optional)',
-                        hintText: 'e.g. A2301',
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
+
+                    // Case A: PO Selected (Option 1)
+                    if (_selectedPO != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryBlue.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                          borderSide: const BorderSide(color: AppColors.border),
+                          border: Border.all(color: AppColors.primaryBlueLight),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryBlue,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _selectedPO!.poNumber,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _selectedPO!.supplierName,
+                                    style: AppTextStyles.bodyStrong.copyWith(fontSize: 14),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'PO Items: ${_selectedPO!.items.length} (${_selectedPO!.totalQty} units)',
+                                    style: AppTextStyles.captionMuted.copyWith(fontSize: 11),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${_inwardedPoItemIds.length} of ${_selectedPO!.items.length} scanned',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: _inwardedPoItemIds.length == _selectedPO!.items.length
+                                        ? AppColors.success
+                                        : AppColors.primaryBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_selectedPO!.items.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: _selectedPO!.items.isEmpty
+                                      ? 0
+                                      : (_inwardedPoItemIds.length / _selectedPO!.items.length),
+                                  backgroundColor: AppColors.border,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    _inwardedPoItemIds.length == _selectedPO!.items.length
+                                        ? AppColors.success
+                                        : AppColors.primaryBlue,
+                                  ),
+                                  minHeight: 5,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: _showPoItemsChecklist,
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.format_list_bulleted_rounded,
+                                      size: 15,
+                                      color: AppColors.primaryBlue,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'View PO Checklist (${_selectedPO!.items.length} items)',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primaryBlue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextField(
-                      controller: _dateController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        labelText: 'Observed Expiry Date',
-                        hintText: 'DDMMYYYY (e.g. 15102026) or MMYYYY',
-                        helperText: _expDate != null
-                            ? 'Valid date: ${_formatDisplayDate(_expDate!)}'
-                            : 'Format: DDMMYYYY or MMYYYY',
-                        helperStyle: TextStyle(
-                          color: _expDate != null ? AppColors.success : AppColors.textMuted,
-                          fontSize: 11,
-                          fontWeight: _expDate != null ? FontWeight.w600 : FontWeight.normal,
+                    ]
+                    // Case B: Direct Supplier Selected (No PO)
+                    else if (_selectedSupplier != null) ...[
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.business_rounded,
+                              color: AppColors.primaryBlue,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedSupplier!.name,
+                                  style: AppTextStyles.bodyStrong.copyWith(fontSize: 15),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (_selectedSupplier!.mobile != null || _selectedSupplier!.phone != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _selectedSupplier!.mobile ?? _selectedSupplier!.phone ?? '',
+                                    style: AppTextStyles.captionMuted.copyWith(fontSize: 11),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: _showPurchaseOrderPicker,
+                        child: Text(
+                          'Tip: Tap here to link this inward to an existing PO',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primaryBlue,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
-                        errorText: _dateParseError,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                      ),
+                    ]
+                    // Case C: Neither PO nor Supplier selected
+                    else ...[
+                      // Primary: Select Purchase Order
+                      InkWell(
+                        onTap: _showPurchaseOrderPicker,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryBlue.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                            border: Border.all(color: AppColors.primaryBlueLight),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primaryBlue,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.receipt_long_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Select Purchase Order (Recommended)',
+                                      style: TextStyle(
+                                        color: AppColors.primaryBlue,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Inward delivery against approved PO',
+                                      style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ],
+                          ),
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                          borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      const SizedBox(height: 8),
+                      // Secondary: Direct Vendor Inward
+                      InkWell(
+                        onTap: _showSupplierPicker,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.business_outlined, size: 15, color: AppColors.textSecondary),
+                              SizedBox(width: 6),
+                              Text(
+                                'Or Direct Inward without PO (Ad-hoc)',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        suffixIcon: IconButton(
-                          icon: const Icon(
-                            Icons.calendar_month_rounded,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+
+              // STEP 2: Product Barcode Scan / Lookup
+              if (_currentItem == null)
+                AppCard(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        size: 40,
+                        color: AppColors.primaryBlue,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Step 2: Scan Product Barcode',
+                        style: AppTextStyles.h3.copyWith(fontSize: 15),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _selectedPO != null
+                            ? 'Scan incoming box barcode to match with PO #${_selectedPO!.poNumber}.'
+                            : 'Scan product or search item to add inward quantity.',
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.captionMuted,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.qr_code_scanner, size: 18),
+                              label: const Text('Scan Barcode'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryBlue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                                ),
+                              ),
+                              onPressed: _scanBarcode,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.search, size: 18),
+                              label: const Text('Search Item'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primaryBlue,
+                                side: const BorderSide(color: AppColors.primaryBlueLight),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                                ),
+                              ),
+                              onPressed: _searchProduct,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_selectedPO != null && _selectedPO!.items.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          icon: const Icon(Icons.touch_app_rounded, size: 16),
+                          label: const Text('Or tap item from PO checklist'),
+                          onPressed: _showPoItemsChecklist,
+                        ),
+                      ],
+                    ],
+                  ),
+                )
+              else ...[
+                // Scanned Product Card with PO Matching Status
+                AppCard(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                            ),
+                            child: const Icon(
+                              Icons.inventory_2_rounded,
+                              color: AppColors.primaryBlue,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _currentItem!.name,
+                                  style: AppTextStyles.h3.copyWith(fontSize: 15),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'SKU / Code: ${_currentItem!.sku}',
+                                  style: AppTextStyles.captionMuted,
+                                ),
+                                if (_currentItem!.mrp != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'MRP: ₹${_currentItem!.mrp}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            tooltip: 'Clear product',
+                            onPressed: () => setState(() {
+                              _currentItem = null;
+                              _currentBatch = null;
+                              _inwardQty = null;
+                              _expDate = null;
+                              _batchController.clear();
+                              _dateController.clear();
+                            }),
+                          ),
+                        ],
+                      ),
+
+                      // PO Match Status Banner
+                      if (_selectedPO != null) ...[
+                        const SizedBox(height: 10),
+                        if (matchedPo != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: AppColors.successBg,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppColors.success.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.verified_rounded,
+                                  size: 16,
+                                  color: AppColors.success,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'PO Match: Ordered ${matchedPo.orderedQty} units in #${_selectedPO!.poNumber}'
+                                    '${matchedPo.receivedQty > 0 ? " (Received: ${matchedPo.receivedQty})" : ""}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.success,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: AppColors.warning.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppColors.warning.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 16,
+                                  color: AppColors.warning,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Extra Item: Not listed in Purchase Order #${_selectedPO!.poNumber}.',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.warning,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+
+                // Inward Quantity Card with PO Variance Feedback
+                AppCard(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Inward Quantity (Stock Arrived)',
+                        style: AppTextStyles.label.copyWith(fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      QuantityStepper(
+                        value: _inwardQty,
+                        onChanged: (v) => setState(() => _inwardQty = v),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _QuickQtyChip(label: '+1', onTap: () => _addQty(1)),
+                            const SizedBox(width: 8),
+                            _QuickQtyChip(label: '+5', onTap: () => _addQty(5)),
+                            const SizedBox(width: 8),
+                            _QuickQtyChip(label: '+10', onTap: () => _addQty(10)),
+                            if (matchedPo != null && matchedPo.orderedQty > 0) ...[
+                              const SizedBox(width: 8),
+                              _QuickQtyChip(
+                                label: 'Match PO (${matchedPo.orderedQty.toInt()})',
+                                onTap: () => _setQty(matchedPo.orderedQty),
+                              ),
+                            ],
+                            const SizedBox(width: 8),
+                            _QuickQtyChip(
+                              label: 'Reset',
+                              isReset: true,
+                              onTap: () => _setQty(null),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Real-time PO Variance Feedback Pill
+                      if (matchedPo != null) ...[
+                        const SizedBox(height: 8),
+                        if (_inwardQty == null)
+                          Text(
+                            'Enter arrived quantity to compare with ordered ${matchedPo.orderedQty} units',
+                            style: AppTextStyles.captionMuted.copyWith(fontSize: 11),
+                          )
+                        else if (_inwardQty == matchedPo.orderedQty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.successBg,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '✓ Exact Match with PO quantity (${matchedPo.orderedQty.toInt()} units)',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          )
+                        else if (_inwardQty! > matchedPo.orderedQty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.warning.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '⚠️ Excess Delivery: +${(_inwardQty! - matchedPo.orderedQty).toInt()} extra units than ordered!',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Shortage: ${(matchedPo.orderedQty - _inwardQty!).toInt()} units pending from supplier',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+
+                // Batch & Expiry Card
+                AppCard(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.event_available_rounded,
+                            size: 16,
                             color: AppColors.primaryBlue,
                           ),
-                          tooltip: 'Open Calendar',
-                          onPressed: _pickDate,
+                          const SizedBox(width: 6),
+                          Text(
+                            'Batch & Expiry Date (Optional)',
+                            style: AppTextStyles.label.copyWith(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _batchController,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: 'Batch Number (Optional)',
+                          hintText: 'e.g. A2301',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
                         ),
                       ),
-                      onChanged: _onDateTextChanged,
-                    ),
-                  ],
+                      const SizedBox(height: AppSpacing.sm),
+                      TextField(
+                        controller: _dateController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: 'Observed Expiry Date',
+                          hintText: 'DDMMYYYY (e.g. 15102026) or MMYYYY',
+                          helperText: _expDate != null
+                              ? 'Valid date: ${_formatDisplayDate(_expDate!)}'
+                              : 'Format: DDMMYYYY or MMYYYY',
+                          helperStyle: TextStyle(
+                            color: _expDate != null ? AppColors.success : AppColors.textMuted,
+                            fontSize: 11,
+                            fontWeight: _expDate != null ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                          errorText: _dateParseError,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: const Icon(
+                              Icons.calendar_month_rounded,
+                              color: AppColors.primaryBlue,
+                            ),
+                            tooltip: 'Open Calendar',
+                            onPressed: _pickDate,
+                          ),
+                        ),
+                        onChanged: _onDateTextChanged,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+
+                // Remarks field button
+                _CompactPillButton(
+                  icon: _remarksController.text.trim().isNotEmpty
+                      ? Icons.check_circle_rounded
+                      : Icons.edit_note_rounded,
+                  label: _remarksController.text.trim().isNotEmpty
+                      ? 'Remarks: ${_remarksController.text.trim()}'
+                      : 'Add Remarks (Optional)',
+                  color: _remarksController.text.trim().isNotEmpty
+                      ? AppColors.primaryBlue
+                      : AppColors.textSecondary,
+                  onTap: _showRemarksModal,
+                ),
+              ],
+
+              if (submission.status == SubmissionStatus.failure) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  submission.errorMessage ?? 'Submission failed. Please try again.',
+                  style: const TextStyle(color: AppColors.critical, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ],
+          ),
+        ),
+        bottomNavigationBar: _currentItem == null
+            ? null
+            : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.xs,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Button 1: Save & Next Item
+                      AppButton(
+                        label: 'Save & Next Item',
+                        loading: isSubmitting,
+                        onPressed: isSubmitting
+                            ? null
+                            : () => _submitInward(nextItem: true),
+                      ),
+                      const SizedBox(height: 6),
+                      // Button 2: Save & Finish
+                      AppButton(
+                        label: 'Save & Finish (Submit to POS)',
+                        variant: AppButtonVariant.secondary,
+                        onPressed: isSubmitting
+                            ? null
+                            : () => _submitInward(nextItem: false),
+                      ),
+                      const SizedBox(height: 6),
+                      // Button 3: Add Photo
+                      OutlinedButton.icon(
+                        icon: Icon(
+                          _photoPath != null ? Icons.check_circle : Icons.camera_alt_outlined,
+                          size: 18,
+                          color: _photoPath != null ? AppColors.success : AppColors.primaryBlue,
+                        ),
+                        label: Text(
+                          _photoPath != null ? 'Photo Attached' : 'Add Photo (Optional)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: _photoPath != null ? AppColors.success : AppColors.primaryBlue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(40),
+                          side: BorderSide(
+                            color: _photoPath != null ? AppColors.success : AppColors.border,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          ),
+                        ),
+                        onPressed: _addPhoto,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
+      ),
+    );
+  }
+}
 
-              // Remarks field button
-              _CompactPillButton(
-                icon: _remarksController.text.trim().isNotEmpty
-                    ? Icons.check_circle_rounded
-                    : Icons.edit_note_rounded,
-                label: _remarksController.text.trim().isNotEmpty
-                    ? 'Remarks: ${_remarksController.text.trim()}'
-                    : 'Add Remarks (Optional)',
-                color: _remarksController.text.trim().isNotEmpty
-                    ? AppColors.primaryBlue
-                    : AppColors.textSecondary,
-                onTap: _showRemarksModal,
+/// Bottom Sheet for selecting a Purchase Order (PO)
+class _PurchaseOrderPickerSheet extends ConsumerStatefulWidget {
+  const _PurchaseOrderPickerSheet({
+    this.selectedSupplierId,
+    required this.onSelected,
+  });
+
+  final String? selectedSupplierId;
+  final ValueChanged<PurchaseOrderModel> onSelected;
+
+  @override
+  ConsumerState<_PurchaseOrderPickerSheet> createState() => _PurchaseOrderPickerSheetState();
+}
+
+class _PurchaseOrderPickerSheetState extends ConsumerState<_PurchaseOrderPickerSheet> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  bool _isLoadingPo = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final posAsync = ref.watch(purchaseOrdersProvider(widget.selectedSupplierId));
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.md,
+          right: AppSpacing.md,
+          top: AppSpacing.md,
+          bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.md,
+        ),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.78,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Select Purchase Order (PO)', style: AppTextStyles.h2),
+                      Text(
+                        'Option 1: PO-Linked Inward',
+                        style: TextStyle(fontSize: 11, color: AppColors.primaryBlue, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search PO number or supplier name…',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                  ),
+                ),
+                onChanged: (val) => setState(() => _query = val.trim().toLowerCase()),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Expanded(
+                child: _isLoadingPo
+                    ? const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 8),
+                            Text('Loading PO items…', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                          ],
+                        ),
+                      )
+                    : posAsync.when(
+                        data: (orders) {
+                          final filtered = _query.isEmpty
+                              ? orders
+                              : orders.where((po) {
+                                  return po.poNumber.toLowerCase().contains(_query) ||
+                                      po.supplierName.toLowerCase().contains(_query);
+                                }).toList();
+
+                          if (filtered.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.textMuted),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'No open purchase orders found.',
+                                    style: TextStyle(color: AppColors.textSecondary),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('Cancel / Direct Inward'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (ctx, i) {
+                              final po = filtered[i];
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                leading: CircleAvatar(
+                                  backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
+                                  child: const Icon(Icons.receipt_long_rounded, color: AppColors.primaryBlue, size: 20),
+                                ),
+                                title: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryBlue,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        po.poNumber,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        po.supplierName,
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                subtitle: Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '${po.totalItems} items (${po.totalQty} units)',
+                                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                      ),
+                                      if (po.poDate != null) ...[
+                                        const SizedBox(width: 8),
+                                        Text('• ${po.poDate}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                trailing: const Icon(Icons.chevron_right, size: 18),
+                                onTap: () async {
+                                  // If PO already has items, use directly
+                                  if (po.items.isNotEmpty) {
+                                    widget.onSelected(po);
+                                    return;
+                                  }
+
+                                  // Otherwise fetch full details
+                                  setState(() => _isLoadingPo = true);
+                                  try {
+                                    final fullPo = await ref
+                                        .read(purchaseRepositoryProvider)
+                                        .purchaseOrderDetail(po.id);
+                                    if (mounted) {
+                                      widget.onSelected(fullPo);
+                                    }
+                                  } catch (e) {
+                                    // Fallback to basic PO model if detail fails
+                                    if (mounted) {
+                                      widget.onSelected(po);
+                                    }
+                                  } finally {
+                                    if (mounted) setState(() => _isLoadingPo = false);
+                                  }
+                                },
+                              );
+                            },
+                          );
+                        },
+                        loading: () => const Center(child: CircularProgressIndicator()),
+                        error: (e, _) => Center(
+                          child: Text('Failed to load purchase orders: $e',
+                              style: const TextStyle(color: AppColors.critical)),
+                        ),
+                      ),
               ),
             ],
-
-            if (submission.status == SubmissionStatus.failure) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                submission.errorMessage ?? 'Submission failed. Please try again.',
-                style: const TextStyle(color: AppColors.critical, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
-      bottomNavigationBar: _currentItem == null
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.xs,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Button 1: Save & Next Item
-                    AppButton(
-                      label: 'Save & Next Item',
-                      loading: isSubmitting,
-                      onPressed: isSubmitting
-                          ? null
-                          : () => _submitInward(nextItem: true),
-                    ),
-                    const SizedBox(height: 6),
-                    // Button 2: Save & Finish
-                    AppButton(
-                      label: 'Save & Finish (Submit to POS)',
-                      variant: AppButtonVariant.secondary,
-                      onPressed: isSubmitting
-                          ? null
-                          : () => _submitInward(nextItem: false),
-                    ),
-                    const SizedBox(height: 6),
-                    // Button 3: Add Photo
-                    OutlinedButton.icon(
-                      icon: Icon(
-                        _photoPath != null ? Icons.check_circle : Icons.camera_alt_outlined,
-                        size: 18,
-                        color: _photoPath != null ? AppColors.success : AppColors.primaryBlue,
+    );
+  }
+}
+
+/// Bottom Sheet showing the complete checklist of items in the selected PO
+class _PoItemsChecklistSheet extends StatelessWidget {
+  const _PoItemsChecklistSheet({
+    required this.po,
+    required this.inwardedItemIds,
+    required this.onItemSelected,
+  });
+
+  final PurchaseOrderModel po;
+  final Set<String> inwardedItemIds;
+  final ValueChanged<PurchaseOrderItemModel> onItemSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.75,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('PO #${po.poNumber} Items', style: AppTextStyles.h2),
+                      Text(
+                        '${inwardedItemIds.length} of ${po.items.length} items checked in',
+                        style: const TextStyle(fontSize: 12, color: AppColors.primaryBlue),
                       ),
-                      label: Text(
-                        _photoPath != null ? 'Photo Attached' : 'Add Photo (Optional)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: _photoPath != null ? AppColors.success : AppColors.primaryBlue,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(40),
-                        side: BorderSide(
-                          color: _photoPath != null ? AppColors.success : AppColors.border,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                        ),
-                      ),
-                      onPressed: _addPhoto,
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tap any item to inward it directly without scanning:',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: po.items.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No items found in this purchase order.',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: po.items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final item = po.items[i];
+                          final isInwarded = inwardedItemIds.contains(item.itemId);
+
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            leading: Icon(
+                              isInwarded ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+                              color: isInwarded ? AppColors.success : AppColors.textMuted,
+                              size: 22,
+                            ),
+                            title: Text(
+                              item.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                decoration: isInwarded ? TextDecoration.lineThrough : null,
+                                color: isInwarded ? AppColors.textMuted : AppColors.textPrimary,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Ordered: ${item.orderedQty.toInt()} units'
+                              '${item.barcode != null ? " • Barcode: ${item.barcode}" : ""}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            trailing: isInwarded
+                                ? const Chip(
+                                    label: Text('Inwarded', style: TextStyle(fontSize: 10, color: AppColors.success)),
+                                    backgroundColor: AppColors.successBg,
+                                    visualDensity: VisualDensity.compact,
+                                  )
+                                : const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                            onTap: () => onItemSelected(item),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

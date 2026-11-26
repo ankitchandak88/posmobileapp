@@ -16,6 +16,7 @@ import '../../features/expiry/presentation/screens/expiry_verification_screen.da
 import '../../features/history/presentation/screens/history_audit_screen.dart';
 import '../../features/notifications/presentation/screens/notification_center_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/purchase/data/purchase_order_model.dart';
 import '../../features/purchase/presentation/screens/inward_entry_screen.dart';
 import '../../features/purchase/presentation/screens/purchase_lookup_screen.dart';
 import '../../features/review/presentation/screens/observation_detail_screen.dart';
@@ -245,6 +246,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           final extra = s.extra is Map ? s.extra as Map : null;
           return InwardEntryScreen(
             initialSupplier: extra?['supplier'] as SupplierModel?,
+            initialPO: extra?['po'] as PurchaseOrderModel?,
             item: extra?['item'] as ItemModel?,
             batch: extra?['batch'] as BatchModel?,
           );

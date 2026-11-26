@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../../shared/models/reference_models.dart';
 import '../../auth/state/auth_providers.dart';
 import '../data/purchase_lookup_model.dart';
+import '../data/purchase_order_model.dart';
 import '../data/purchase_repository.dart';
 
 final purchaseRepositoryProvider = Provider<PurchaseRepository>((ref) {
@@ -14,6 +15,20 @@ final suppliersProvider = FutureProvider.autoDispose<List<SupplierModel>>((ref) 
 });
 
 final selectedSupplierProvider = StateProvider<SupplierModel?>((ref) => null);
+
+final purchaseOrdersProvider = FutureProvider.autoDispose.family<List<PurchaseOrderModel>, String?>((ref, supplierId) async {
+  return ref.watch(purchaseRepositoryProvider).purchaseOrders(supplierId: supplierId);
+});
+
+final openPurchaseOrdersProvider = FutureProvider.autoDispose<List<PurchaseOrderModel>>((ref) async {
+  return ref.watch(purchaseRepositoryProvider).purchaseOrders(status: 'Open');
+});
+
+final purchaseOrderDetailProvider = FutureProvider.autoDispose.family<PurchaseOrderModel, String>((ref, poId) async {
+  return ref.watch(purchaseRepositoryProvider).purchaseOrderDetail(poId);
+});
+
+final selectedPurchaseOrderProvider = StateProvider<PurchaseOrderModel?>((ref) => null);
 
 class PurchaseLookupState {
   const PurchaseLookupState({

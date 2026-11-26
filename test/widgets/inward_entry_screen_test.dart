@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:urban_pets_verify/features/purchase/data/purchase_order_model.dart';
 import 'package:urban_pets_verify/features/purchase/presentation/screens/inward_entry_screen.dart';
 import 'package:urban_pets_verify/shared/models/models.dart';
 
@@ -12,15 +13,48 @@ final testItem = ItemModel(
   mrp: 1250,
 );
 
+final testExtraItem = ItemModel(
+  id: '999',
+  name: 'Royal Canin Maxi Puppy 4kg',
+  sku: 'RC-MAXI',
+  mrp: 2900,
+);
+
 const testSupplier = SupplierModel(
   id: '7',
   name: 'Mars Petcare India',
   mobile: '9876543210',
 );
 
+const testPO = PurchaseOrderModel(
+  id: '501',
+  poNumber: 'PO-2026-0042',
+  supplierId: '7',
+  supplierName: 'Mars Petcare India',
+  branchId: '1',
+  totalQty: 25,
+  totalItems: 2,
+  items: [
+    PurchaseOrderItemModel(
+      id: '1',
+      poItemId: '1',
+      itemId: '101',
+      name: 'Pedigree Adult Meat & Rice 10kg',
+      orderedQty: 10,
+    ),
+    PurchaseOrderItemModel(
+      id: '2',
+      poItemId: '2',
+      itemId: '102',
+      name: 'Whiskas Ocean Fish 3kg',
+      orderedQty: 15,
+    ),
+  ],
+);
+
 void main() {
   group('InwardEntryScreen', () {
-    testWidgets('shows supplier selector when no initial supplier provided', (tester) async {
+    testWidgets('shows PO selector and ad-hoc inward options when no initial PO/supplier provided', (tester) async {
       useTallViewport(tester);
       await pumpScreen(
         tester,
@@ -28,8 +62,9 @@ void main() {
         user: staffUser,
       );
 
-      expect(find.text('Inward / Supplier Stock'), findsOneWidget);
-      expect(find.text('Tap to Select Supplier (Required)'), findsOneWidget);
+      expect(find.text('Inward / Stock Receive'), findsOneWidget);
+      expect(find.text('Select Purchase Order (Recommended)'), findsOneWidget);
+      expect(find.text('Or Direct Inward without PO (Ad-hoc)'), findsOneWidget);
     });
 
     testWidgets('submits inward observation with supplier, quantity, and expiry date', (tester) async {
@@ -144,8 +179,66 @@ void main() {
       await tester.tap(find.text('Clear'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Tap to Select Supplier (Required)'), findsOneWidget);
+      expect(find.text('Select Purchase Order (Recommended)'), findsOneWidget);
       expect(find.text('Mars Petcare India'), findsNothing);
+    });
+
+    testWidgets('Option 1: PO-Linked Inward matches PO item, shows variance, and appends [PO: #...] in remarks', (tester) async {
+      useTallViewport(tester);
+      final repo = FakeObservationRepository();
+
+      await pumpScreen(
+        tester,
+        InwardEntryScreen(
+          initialPO: testPO,
+          item: testItem,
+        ),
+        user: staffUser,
+        observations: repo,
+      );
+
+      // Verify PO Mode Active badge and PO Card
+      expect(find.text('PO-Linked Mode'), findsOneWidget);
+      expect(find.text('PO-2026-0042'), findsOneWidget);
+      expect(find.text('Mars Petcare India'), findsOneWidget);
+
+      // Verify item match banner with ordered quantity
+      expect(find.textContaining('PO Match: Ordered 10 units in #PO-2026-0042'), findsOneWidget);
+
+      // Match PO quantity using quick chip
+      await tester.tap(find.text('Match PO (10)'));
+      await tester.pump();
+
+      // Verify exact match feedback pill
+      expect(find.textContaining('Exact Match with PO quantity (10 units)'), findsOneWidget);
+
+      // Submit via Save & Finish
+      await tester.tap(find.text('Save & Finish (Submit to POS)'));
+      await tester.pumpAndSettle();
+
+      expect(repo.submitCalls, hasLength(1));
+      final call = repo.submitCalls.single;
+      expect(call.type, 'stock_count');
+      expect(call.itemId, '101');
+      expect(call.supplierId, '7');
+      expect(call.physicalQty, 10);
+      expect(call.remarks, contains('[PO: PO-2026-0042]'));
+    });
+
+    testWidgets('Option 1: Warns when an item is NOT in the selected Purchase Order', (tester) async {
+      useTallViewport(tester);
+
+      await pumpScreen(
+        tester,
+        InwardEntryScreen(
+          initialPO: testPO,
+          item: testExtraItem,
+        ),
+        user: staffUser,
+      );
+
+      // Extra item warning banner should be displayed
+      expect(find.textContaining('Extra Item: Not listed in Purchase Order #PO-2026-0042'), findsOneWidget);
     });
   });
 }
