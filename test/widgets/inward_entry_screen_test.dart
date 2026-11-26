@@ -240,5 +240,79 @@ void main() {
       // Extra item warning banner should be displayed
       expect(find.textContaining('Extra Item: Not listed in Purchase Order #PO-2026-0042'), findsOneWidget);
     });
+
+    testWidgets('Option 1: Real-time PO variance shows Shortage and Excess delivery alerts', (tester) async {
+      useTallViewport(tester);
+
+      await pumpScreen(
+        tester,
+        InwardEntryScreen(
+          initialPO: testPO,
+          item: testItem, // Ordered: 10
+        ),
+        user: staffUser,
+      );
+
+      // Tap +5 -> Count is 5 (< 10)
+      await tester.tap(find.text('+5'));
+      await tester.pump();
+
+      expect(find.textContaining('Shortage: 5 units pending from supplier'), findsOneWidget);
+
+      // Tap +10 -> Count is 15 (> 10)
+      await tester.tap(find.text('+10'));
+      await tester.pump();
+
+      expect(find.textContaining('Excess Delivery: +5 extra units than ordered!'), findsOneWidget);
+    });
+
+    testWidgets('Option 1: Tapping View PO Checklist opens sheet and selecting item loads it directly', (tester) async {
+      useTallViewport(tester);
+
+      await pumpScreen(
+        tester,
+        const InwardEntryScreen(
+          initialPO: testPO,
+        ),
+        user: staffUser,
+      );
+
+      // Tap View PO Checklist button
+      await tester.tap(find.textContaining('View PO Checklist'));
+      await tester.pumpAndSettle();
+
+      // Verify bottom sheet title and items
+      expect(find.text('PO #PO-2026-0042 Items'), findsOneWidget);
+      expect(find.text('Whiskas Ocean Fish 3kg'), findsOneWidget);
+
+      // Tap on Whiskas Ocean Fish 3kg from the checklist
+      await tester.tap(find.text('Whiskas Ocean Fish 3kg'));
+      await tester.pumpAndSettle();
+
+      // Product should now be selected as _currentItem
+      expect(find.text('Whiskas Ocean Fish 3kg'), findsOneWidget);
+      expect(find.textContaining('PO Match: Ordered 15 units in #PO-2026-0042'), findsOneWidget);
+    });
+
+    testWidgets('Option 1: Clear button on PO resets back to initial option selector', (tester) async {
+      useTallViewport(tester);
+
+      await pumpScreen(
+        tester,
+        const InwardEntryScreen(
+          initialPO: testPO,
+        ),
+        user: staffUser,
+      );
+
+      expect(find.text('PO-2026-0042'), findsOneWidget);
+      expect(find.text('Clear'), findsOneWidget);
+
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Select Purchase Order (Recommended)'), findsOneWidget);
+      expect(find.text('PO-2026-0042'), findsNothing);
+    });
   });
 }
