@@ -353,13 +353,6 @@ class DashboardScreen extends ConsumerWidget {
                             color: AppColors.primaryBlue,
                             onTap: () => context.push('/barcode-mapping/review'),
                           ),
-                          _DashboardTile(
-                            label: 'Expiry Settings',
-                            subtitle: 'Exposure buckets',
-                            icon: Icons.tune_rounded,
-                            color: AppColors.primaryBlue,
-                            onTap: () => context.push('/expiry-bucket-settings'),
-                          ),
                         ] else
                           _DashboardTile(
                             label: 'My Tasks',

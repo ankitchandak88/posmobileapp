@@ -41,7 +41,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
   ItemModel? _currentItem;
   BatchModel? _currentBatch;
 
-  num _inwardQty = 1;
+  num? _inwardQty;
   final _batchController = TextEditingController();
   final _dateController = TextEditingController();
   final _remarksController = TextEditingController();
@@ -147,12 +147,12 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
 
   void _addQty(num delta) {
     HapticFeedback.selectionClick();
-    setState(() => _inwardQty = (_inwardQty + delta) > 0 ? (_inwardQty + delta) : 1);
+    setState(() => _inwardQty = (_inwardQty ?? 0) + delta);
   }
 
-  void _setQty(num val) {
+  void _setQty(num? val) {
     HapticFeedback.selectionClick();
-    setState(() => _inwardQty = val > 0 ? val : 1);
+    setState(() => _inwardQty = val);
   }
 
   Future<void> _addPhoto() async {
@@ -274,7 +274,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
     if (scannedItem != null && scannedItem is ItemModel) {
       setState(() {
         _currentItem = scannedItem;
-        _inwardQty = 1;
+        _inwardQty = null;
         _batchController.clear();
         _dateController.clear();
         _expDate = null;
@@ -303,7 +303,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
     if (selectedItem != null && selectedItem is ItemModel) {
       setState(() {
         _currentItem = selectedItem;
-        _inwardQty = 1;
+        _inwardQty = null;
         _batchController.clear();
         _dateController.clear();
         _expDate = null;
@@ -328,6 +328,16 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please scan or select a product.'),
+          backgroundColor: AppColors.critical,
+        ),
+      );
+      return;
+    }
+
+    if (_inwardQty == null || _inwardQty! <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter inward quantity before saving.'),
           backgroundColor: AppColors.critical,
         ),
       );
@@ -364,7 +374,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
       supplierId: _selectedSupplier!.id,
       batchNo: batchText.isNotEmpty ? batchText : _currentBatch?.batchNo,
       expDateObserved: _expDate,
-      physicalQty: _inwardQty,
+      physicalQty: _inwardQty!,
       remarks: _remarksController.text.trim().isEmpty
           ? null
           : _remarksController.text.trim(),
@@ -377,7 +387,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
         setState(() {
           _currentItem = null;
           _currentBatch = null;
-          _inwardQty = 1;
+          _inwardQty = null;
           _batchController.clear();
           _dateController.clear();
           _remarksController.clear();
@@ -392,6 +402,8 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
           ),
         );
       } else {
+        ref.read(selectedSupplierProvider.notifier).state = null;
+        _selectedSupplier = null;
         context.pushReplacement(
           '/submission-confirmation',
           extra: {
@@ -408,7 +420,14 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
     final submission = ref.watch(observationSubmissionProvider);
     final isSubmitting = submission.status == SubmissionStatus.submitting;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          ref.read(selectedSupplierProvider.notifier).state = null;
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Inward / Supplier Stock'),
         actions: [
@@ -475,7 +494,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
                           ),
                         ],
                       ),
-                      if (_selectedSupplier != null)
+                      if (_selectedSupplier != null) ...[
                         TextButton(
                           onPressed: _showSupplierPicker,
                           style: TextButton.styleFrom(
@@ -485,6 +504,29 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
                           ),
                           child: const Text('Change', style: TextStyle(fontSize: 12)),
                         ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedSupplier = null;
+                            });
+                            ref.read(selectedSupplierProvider.notifier).state = null;
+                          },
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(40, 24),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            'Clear',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.critical,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -648,7 +690,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
                     const SizedBox(height: 8),
                     QuantityStepper(
                       value: _inwardQty,
-                      onChanged: (v) => setState(() => _inwardQty = (v != null && v > 0) ? v : 1),
+                      onChanged: (v) => setState(() => _inwardQty = v),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     SingleChildScrollView(
@@ -665,7 +707,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
                           _QuickQtyChip(
                             label: 'Reset',
                             isReset: true,
-                            onTap: () => _setQty(1),
+                            onTap: () => _setQty(null),
                           ),
                         ],
                       ),
@@ -838,6 +880,7 @@ class _InwardEntryScreenState extends ConsumerState<InwardEntryScreen> {
                 ),
               ),
             ),
+      ),
     );
   }
 }

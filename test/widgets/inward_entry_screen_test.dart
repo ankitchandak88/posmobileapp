@@ -50,7 +50,9 @@ void main() {
       expect(find.text('Mars Petcare India'), findsOneWidget);
       expect(find.textContaining('Pedigree Adult Meat & Rice 10kg'), findsOneWidget);
 
-      // Increment inward quantity to 3
+      // Increment inward quantity to 3 (starts null -> 1 -> 2 -> 3)
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
       await tester.tap(find.byIcon(Icons.add));
       await tester.pump();
       await tester.tap(find.byIcon(Icons.add));
@@ -98,6 +100,10 @@ void main() {
         observations: repo,
       );
 
+      // Set inward quantity to 1
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
       // Enter Expiry Date
       await tester.enterText(
         find.widgetWithText(TextField, 'Observed Expiry Date'),
@@ -118,6 +124,28 @@ void main() {
 
       // Supplier should still be retained
       expect(find.text('Mars Petcare India'), findsOneWidget);
+    });
+
+    testWidgets('Clear button removes selected supplier', (tester) async {
+      useTallViewport(tester);
+
+      await pumpScreen(
+        tester,
+        InwardEntryScreen(
+          initialSupplier: testSupplier,
+          item: testItem,
+        ),
+        user: staffUser,
+      );
+
+      expect(find.text('Mars Petcare India'), findsOneWidget);
+      expect(find.text('Clear'), findsOneWidget);
+
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tap to Select Supplier (Required)'), findsOneWidget);
+      expect(find.text('Mars Petcare India'), findsNothing);
     });
   });
 }
