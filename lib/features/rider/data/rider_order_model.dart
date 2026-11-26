@@ -25,6 +25,7 @@ class RiderOrderModel {
     this.vehicleRegistration,
     this.deliveryNote,
     this.branchTitle,
+    this.petName,
   });
 
   final int id;
@@ -43,6 +44,7 @@ class RiderOrderModel {
   final String? deliveryNote;
   final String customerName;
   final String customerPhone;
+  final String? petName;
   final String? streetAddress;
   final String? area;
   final String? postcode;
@@ -87,6 +89,7 @@ class RiderOrderModel {
     final post = deliveryAddress?['postcode'] as String?;
     final mapLink = deliveryAddress?['google_map_link'] as String?;
     final customerArea = customer?['area'] as String?;
+    final pet = customer?['pet_name'] as String? ?? json['pet_name'] as String?;
 
     return RiderOrderModel(
       id: json['id'] is int
@@ -111,6 +114,7 @@ class RiderOrderModel {
       deliveryNote: json['delivery_note'] as String?,
       customerName: customer?['full_name'] as String? ?? 'Valued Customer',
       customerPhone: customer?['mobile_number'] as String? ?? '',
+      petName: pet,
       streetAddress: street,
       area: customerArea,
       postcode: post,
@@ -138,6 +142,7 @@ class RiderOrderModel {
     String? deliveryNote,
     String? customerName,
     String? customerPhone,
+    String? petName,
     String? streetAddress,
     String? area,
     String? postcode,
@@ -163,6 +168,7 @@ class RiderOrderModel {
       deliveryNote: deliveryNote ?? this.deliveryNote,
       customerName: customerName ?? this.customerName,
       customerPhone: customerPhone ?? this.customerPhone,
+      petName: petName ?? this.petName,
       streetAddress: streetAddress ?? this.streetAddress,
       area: area ?? this.area,
       postcode: postcode ?? this.postcode,
@@ -187,9 +193,12 @@ class RiderOrderModel {
     'ending_km': endingKm,
     'km_travelled': kmTravelled,
     'notes': notes,
+    'delivery_note': deliveryNote,
+    'pet_name': petName,
     'customer': {
       'full_name': customerName,
       'mobile_number': customerPhone,
+      'pet_name': petName,
       'street_address': streetAddress,
       'area': area,
     },

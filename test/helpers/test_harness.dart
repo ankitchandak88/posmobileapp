@@ -703,7 +703,7 @@ class FakeRiderOrderRepository extends RiderOrderRepository {
       kmTravelled: (endingKm != null && (startingKm ?? old.startingKm) != null)
           ? endingKm - (startingKm ?? old.startingKm)!
           : old.kmTravelled,
-      notes: notes ?? old.notes,
+      notes: old.notes,
       deliveryNote: notes ?? old.deliveryNote,
       customerName: old.customerName,
       customerPhone: old.customerPhone,

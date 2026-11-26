@@ -18,11 +18,13 @@ void main() {
         'ending_km': null,
         'km_travelled': null,
         'notes': 'Call before reaching',
+        'delivery_note': 'Leave at guard room',
         'customer': {
           'id': 390,
           'full_name': 'TARANG ROGHELIA',
           'mobile_number': '9825901508',
           'area': 'Satellite',
+          'pet_name': 'Bruno (Golden Retriever)',
         },
         'delivery_address': {
           'id': 12,
@@ -54,6 +56,9 @@ void main() {
       expect(order.isDelivered, isFalse);
       expect(order.isCashOnDelivery, isTrue);
       expect(order.isPaidOnline, isFalse);
+      expect(order.notes, 'Call before reaching');
+      expect(order.deliveryNote, 'Leave at guard room');
+      expect(order.petName, 'Bruno (Golden Retriever)');
       expect(order.startingKm, 1420.5);
       expect(order.endingKm, isNull);
       expect(order.vehicleRegistration, 'GJ-01-AB-1234');

@@ -25,22 +25,31 @@ class RiderOrdersState {
   final String selectedTab; // 'all', 'assigned', 'out_for_delivery', 'delivered'
   final String? errorMessage;
 
-  int get totalCount => orders.length;
-  int get assignedCount => orders.where((o) => o.isAssigned).length;
-  int get outForDeliveryCount => orders.where((o) => o.isOutForDelivery).length;
-  int get deliveredCount => orders.where((o) => o.isDelivered).length;
+  static bool _isToday(RiderOrderModel o) {
+    final now = DateTime.now();
+    final d = o.deliveryDate ?? o.invoiceDate;
+    if (d == null) return true;
+    return d.year == now.year && d.month == now.month && d.day == now.day;
+  }
+
+  List<RiderOrderModel> get todayOrders => orders.where(_isToday).toList();
+
+  int get totalCount => todayOrders.length;
+  int get assignedCount => todayOrders.where((o) => o.isAssigned).length;
+  int get outForDeliveryCount => todayOrders.where((o) => o.isOutForDelivery).length;
+  int get deliveredCount => todayOrders.where((o) => o.isDelivered).length;
 
   List<RiderOrderModel> get filteredOrders {
     switch (selectedTab) {
       case 'assigned':
-        return orders.where((o) => o.isAssigned).toList();
+        return todayOrders.where((o) => o.isAssigned).toList();
       case 'out_for_delivery':
-        return orders.where((o) => o.isOutForDelivery).toList();
+        return todayOrders.where((o) => o.isOutForDelivery).toList();
       case 'delivered':
-        return orders.where((o) => o.isDelivered).toList();
+        return todayOrders.where((o) => o.isDelivered).toList();
       case 'all':
       default:
-        return orders;
+        return todayOrders;
     }
   }
 

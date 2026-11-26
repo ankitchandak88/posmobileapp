@@ -54,30 +54,39 @@ class DeliveryOrderCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.border),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: const Icon(
+                        Icons.receipt_long_rounded,
+                        size: 18,
+                        color: AppColors.primaryBlue,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.receipt_long_rounded,
-                      size: 16,
-                      color: AppColors.primaryBlue,
+                    const SizedBox(width: AppSpacing.sm),
+                    Flexible(
+                      child: Text(
+                        'Bill #${order.invoiceNo}',
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.h3.copyWith(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    'Bill #${order.invoiceNo}',
-                    style: AppTextStyles.h3.copyWith(fontSize: 15),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
@@ -86,7 +95,7 @@ class DeliveryOrderCard extends StatelessWidget {
                   order.statusLabel,
                   style: TextStyle(
                     color: statusColor,
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -97,13 +106,13 @@ class DeliveryOrderCard extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: AppSpacing.sm),
 
-          // Customer info
+          // Customer info & Pet Name
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(
                 Icons.person_outline_rounded,
-                size: 18,
+                size: 20,
                 color: AppColors.textSecondary,
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -113,16 +122,55 @@ class DeliveryOrderCard extends StatelessWidget {
                   children: [
                     Text(
                       order.customerName,
-                      style: AppTextStyles.bodyStrong.copyWith(fontSize: 15),
+                      style: AppTextStyles.bodyStrong.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     if (order.customerPhone.isNotEmpty)
-                      Text(
-                        order.customerPhone,
-                        style: AppTextStyles.caption.copyWith(fontSize: 13),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          order.customerPhone,
+                          style: AppTextStyles.caption.copyWith(
+                            fontSize: 15,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
+                    // Pet Name Badge
+                    if (order.petName != null && order.petName!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7ED),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFFDBA74)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('🐾 ', style: TextStyle(fontSize: 13)),
+                            Flexible(
+                              child: Text(
+                                'Pet: ${order.petName!}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFFC2410C),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
+              const SizedBox(width: AppSpacing.sm),
               // Total Amount
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -130,14 +178,14 @@ class DeliveryOrderCard extends StatelessWidget {
                   Text(
                     '₹${order.totalAmount.toStringAsFixed(2)}',
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.textPrimary,
                     ),
                   ),
                   Container(
-                    margin: const EdgeInsets.only(top: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: order.isPaidOnline
                           ? AppColors.successBg
@@ -150,7 +198,7 @@ class DeliveryOrderCard extends StatelessWidget {
                         color: order.isPaidOnline
                             ? AppColors.success
                             : AppColors.warning,
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -174,7 +222,7 @@ class DeliveryOrderCard extends StatelessWidget {
               children: [
                 const Icon(
                   Icons.location_on_outlined,
-                  size: 16,
+                  size: 18,
                   color: AppColors.primaryBlue,
                 ),
                 const SizedBox(width: AppSpacing.xs),
@@ -182,9 +230,10 @@ class DeliveryOrderCard extends StatelessWidget {
                   child: Text(
                     order.fullAddress,
                     style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                      height: 1.3,
+                      fontSize: 14,
+                      color: Color(0xFF374151),
+                      fontWeight: FontWeight.w500,
+                      height: 1.35,
                     ),
                   ),
                 ),
@@ -195,7 +244,7 @@ class DeliveryOrderCard extends StatelessWidget {
           // Vehicle Info & Selection Option (shown before KM)
           const SizedBox(height: AppSpacing.xs),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: order.vehicleRegistration != null
                   ? AppColors.primaryBlue.withValues(alpha: 0.06)
@@ -214,18 +263,18 @@ class DeliveryOrderCard extends StatelessWidget {
                   children: [
                     Icon(
                       Icons.two_wheeler_rounded,
-                      size: 16,
+                      size: 18,
                       color: order.vehicleRegistration != null
                           ? AppColors.primaryBlue
                           : AppColors.textSecondary,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Text(
                       order.vehicleRegistration != null
                           ? 'Vehicle: ${order.vehicleRegistration}'
                           : 'No vehicle assigned',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: order.vehicleRegistration != null
                             ? FontWeight.w700
                             : FontWeight.w500,
@@ -254,11 +303,11 @@ class DeliveryOrderCard extends StatelessWidget {
                     },
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: Text(
                         order.vehicleRegistration != null ? 'Change' : '+ Select',
                         style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: AppColors.primaryBlue,
                         ),
@@ -274,27 +323,27 @@ class DeliveryOrderCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 6,
-              runSpacing: 2,
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                const Icon(Icons.speed, size: 14, color: AppColors.textSecondary),
+                const Icon(Icons.speed, size: 16, color: AppColors.textSecondary),
                 Text(
                   'Start: ${order.startingKm!} km',
-                  style: AppTextStyles.caption.copyWith(fontSize: 11),
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
                 ),
                 if (order.endingKm != null) ...[
-                  const Text('•', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                  const Text('•', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                   Text(
                     'End: ${order.endingKm!} km',
-                    style: AppTextStyles.caption.copyWith(fontSize: 11),
+                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
                   ),
                 ],
                 if (order.kmTravelled != null) ...[
-                  const Text('•', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                  const Text('•', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                   Text(
                     'Travelled: ${order.kmTravelled!} km',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: AppColors.success,
                     ),
@@ -304,30 +353,87 @@ class DeliveryOrderCard extends StatelessWidget {
             ),
           ],
 
-          if ((order.deliveryNote != null && order.deliveryNote!.trim().isNotEmpty) ||
-              (order.notes != null && order.notes!.trim().isNotEmpty)) ...[
-            const SizedBox(height: 6),
+          // Staff Note (distinct from rider note)
+          if (order.notes != null && order.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border),
+                color: const Color(0xFFEFF6FF), // soft blue background
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.note_alt_outlined, size: 14, color: AppColors.primaryBlue),
-                  const SizedBox(width: 6),
+                  const Icon(Icons.description_outlined, size: 16, color: AppColors.primaryBlue),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'Delivery Note: ${(order.deliveryNote ?? order.notes)!.trim()}',
-                      style: const TextStyle(
-                        fontStyle: FontStyle.italic,
-                        fontSize: 11,
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Staff / Order Note',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          order.notes!.trim(),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF1E3A8A),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Rider Delivery Note (distinct from staff note)
+          if (order.deliveryNote != null && order.deliveryNote!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4), // soft green background
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.two_wheeler_rounded, size: 16, color: AppColors.success),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Rider Delivery Note',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.success,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          order.deliveryNote!.trim(),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF14532D),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -337,76 +443,29 @@ class DeliveryOrderCard extends StatelessWidget {
 
           const SizedBox(height: AppSpacing.md),
 
-          // One-tap Action Buttons Row: Call, Google Maps, WhatsApp
-          Row(
-            children: [
-              // Call
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: Key('call_button_${order.id}'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.success,
-                    side: const BorderSide(color: AppColors.success),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: const Icon(Icons.call_rounded, size: 16),
-                  label: const Text('Call', style: TextStyle(fontSize: 12)),
-                  onPressed: order.customerPhone.isNotEmpty
-                      ? () => NavigationService.callCustomer(order.customerPhone)
-                      : null,
+          // Google Maps Navigation Button (Call & WhatsApp removed as requested)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              key: Key('maps_button_${order.id}'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              const SizedBox(width: AppSpacing.xs),
-
-              // Google Maps
-              Expanded(
-                child: ElevatedButton.icon(
-                  key: Key('maps_button_${order.id}'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: const Icon(Icons.map_rounded, size: 16),
-                  label: const Text('Map', style: TextStyle(fontSize: 12)),
-                  onPressed: () => NavigationService.openGoogleMaps(
-                    googleMapLink: order.googleMapLink,
-                    address: order.fullAddress,
-                  ),
-                ),
+              icon: const Icon(Icons.navigation_rounded, size: 20),
+              label: const Text(
+                'Open Google Maps Navigation',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(width: AppSpacing.xs),
-
-              // WhatsApp
-              SizedBox(
-                width: 44,
-                child: OutlinedButton(
-                  key: Key('whatsapp_button_${order.id}'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.teal,
-                    side: const BorderSide(color: Colors.teal),
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: order.customerPhone.isNotEmpty
-                      ? () => NavigationService.openWhatsApp(
-                            order.customerPhone,
-                            defaultMessage:
-                                'Hello ${order.customerName}, this is Urban Pets delivery regarding your order #${order.invoiceNo}.',
-                          )
-                      : null,
-                  child: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-                ),
+              onPressed: () => NavigationService.openGoogleMaps(
+                googleMapLink: order.googleMapLink,
+                address: order.fullAddress,
               ),
-            ],
+            ),
           ),
 
           // Primary Delivery Progression Action (Start Delivery / Mark Delivered)
@@ -417,15 +476,15 @@ class DeliveryOrderCard extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.warning,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              icon: const Icon(Icons.two_wheeler_rounded, size: 18),
+              icon: const Icon(Icons.two_wheeler_rounded, size: 20),
               label: const Text(
                 'Start Delivery (Vehicle & KM)',
-                style: TextStyle(fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
               onPressed: () async {
                 final selectedVehicle = await VehicleSelectionSheet.show(
@@ -467,15 +526,15 @@ class DeliveryOrderCard extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              icon: const Icon(Icons.check_circle_rounded, size: 18),
+              icon: const Icon(Icons.check_circle_rounded, size: 20),
               label: const Text(
                 'Mark Delivered (Enter Ending KM)',
-                style: TextStyle(fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
               onPressed: () async {
                 final result = await KmInputDialog.show(

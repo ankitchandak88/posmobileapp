@@ -132,10 +132,10 @@ void main() {
     await tester.tap(find.byKey(const Key('rider_tab_assigned')));
     await tester.pumpAndSettle();
 
-    // Verify Action buttons exist
-    expect(find.byKey(const Key('call_button_101')), findsOneWidget);
+    // Verify Action buttons: Call & WhatsApp removed as requested, Maps Navigation present
+    expect(find.byKey(const Key('call_button_101')), findsNothing);
+    expect(find.byKey(const Key('whatsapp_button_101')), findsNothing);
     expect(find.byKey(const Key('maps_button_101')), findsOneWidget);
-    expect(find.byKey(const Key('whatsapp_button_101')), findsOneWidget);
     expect(find.byKey(const Key('start_delivery_button_101')), findsOneWidget);
 
     // Tap 'Start Delivery' button -> Step 1: Select Vehicle opens FIRST
@@ -266,7 +266,66 @@ void main() {
     await tester.tap(find.byKey(const Key('rider_tab_delivered')));
     await tester.pumpAndSettle();
 
-    // Verify delivery note is displayed on card
-    expect(find.text('Delivery Note: Delivered to customer'), findsOneWidget);
+    // Verify rider delivery note is displayed on card in distinct box
+    expect(find.text('Rider Delivery Note'), findsOneWidget);
+    expect(find.text('Delivered to customer'), findsOneWidget);
+  });
+
+  testWidgets('RiderDeliveriesScreen header summary pills filter orders on tap and displays pet name', (tester) async {
+    useTallViewport(tester);
+    final petOrders = [
+      riderOrderFixture(
+        id: 201,
+        invoiceNo: 'BILL-201',
+        status: 'assigned',
+        statusLabel: 'Assigned',
+        customerName: 'Sanjay Shah',
+      ).copyWith(petName: 'Bruno (Labrador)'),
+      riderOrderFixture(
+        id: 202,
+        invoiceNo: 'BILL-202',
+        status: 'out_for_delivery',
+        statusLabel: 'Out for Delivery',
+        customerName: 'Amit Verma',
+      ).copyWith(notes: 'Handle with care: pet food glass jar'),
+    ];
+    final repo = FakeRiderOrderRepository(initialOrders: petOrders);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          riderOrderRepositoryProvider.overrideWithValue(repo),
+          authControllerProvider.overrideWith(
+            (ref) => FakeAuthController(riderUser),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: const RiderDeliveriesScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify Pet badge
+    expect(find.text('Pet: Bruno (Labrador)'), findsOneWidget);
+
+    // Verify Staff Note
+    expect(find.text('Staff / Order Note'), findsOneWidget);
+    expect(find.text('Handle with care: pet food glass jar'), findsOneWidget);
+
+    // Tap header pill 'Assigned'
+    await tester.tap(find.byKey(const Key('rider_summary_pill_assigned')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bill #BILL-201'), findsOneWidget);
+    expect(find.text('Bill #BILL-202'), findsNothing);
+
+    // Tap header pill 'Out for Del.'
+    await tester.tap(find.byKey(const Key('rider_summary_pill_out_for_delivery')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bill #BILL-201'), findsNothing);
+    expect(find.text('Bill #BILL-202'), findsOneWidget);
   });
 }

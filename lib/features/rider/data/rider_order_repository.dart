@@ -70,7 +70,6 @@ class RiderOrderRepository {
     if (paymentStatus != null) data['payment_status'] = paymentStatus;
     if (paymentNote != null) data['payment_note'] = paymentNote;
     if (notes != null && notes.trim().isNotEmpty) {
-      data['notes'] = notes.trim();
       data['delivery_note'] = notes.trim();
     }
 

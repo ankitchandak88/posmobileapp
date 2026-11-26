@@ -242,7 +242,7 @@ class RiderDeliveriesScreen extends ConsumerWidget {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Summary Cards Header
+            // Summary Cards Header (1-Tap interactive filters)
             SliverToBoxAdapter(
               child: Container(
                 color: AppColors.navy,
@@ -256,25 +256,34 @@ class RiderDeliveriesScreen extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: _buildSummaryPill(
+                        ref: ref,
+                        keyStr: 'assigned',
                         label: 'Assigned',
                         count: riderState.assignedCount,
                         color: AppColors.warning,
+                        isSelected: riderState.selectedTab == 'assigned',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: _buildSummaryPill(
-                        label: 'Out for Delivery',
+                        ref: ref,
+                        keyStr: 'out_for_delivery',
+                        label: 'Out for Del.',
                         count: riderState.outForDeliveryCount,
                         color: Colors.lightBlueAccent,
+                        isSelected: riderState.selectedTab == 'out_for_delivery',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: _buildSummaryPill(
+                        ref: ref,
+                        keyStr: 'delivered',
                         label: 'Completed',
                         count: riderState.deliveredCount,
                         color: Colors.greenAccent,
+                        isSelected: riderState.selectedTab == 'delivered',
                       ),
                     ),
                   ],
@@ -472,38 +481,81 @@ class RiderDeliveriesScreen extends ConsumerWidget {
   }
 
   Widget _buildSummaryPill({
+    required WidgetRef ref,
+    required String keyStr,
     required String label,
     required int count,
     required Color color,
+    required bool isSelected,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(
-            '$count',
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w900,
-              fontSize: 18,
-            ),
+    return InkWell(
+      key: Key('rider_summary_pill_$keyStr'),
+      onTap: () {
+        final notifier = ref.read(riderOrdersProvider.notifier);
+        if (isSelected) {
+          notifier.setTab('all');
+        } else {
+          notifier.setTab(keyStr);
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.22)
+              : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? Colors.white : Colors.white24,
+            width: isSelected ? 2.0 : 1.0,
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w900,
+                fontSize: 22,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 3),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (isSelected)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 3),
+                    child: Icon(Icons.check_circle_rounded, size: 12, color: color),
+                  ),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
