@@ -16,7 +16,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.urbanpets.verify.urban_pets_verify"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -33,8 +33,8 @@ android {
         applicationId = "com.urbanpets.verify.urban_pets_verify"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -45,6 +45,8 @@ android {
             keyPassword = keystoreProperties.getProperty("keyPassword")
             storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
             storePassword = keystoreProperties.getProperty("storePassword")
+            enableV1Signing = true
+            enableV2Signing = true
         }
     }
 
@@ -55,16 +57,8 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
-            // R8 code + resource shrinking: strips unused Dart/Java/Kotlin
-            // code paths and unused drawable/string resources from the
-            // release build. Has no effect on debug builds (debug keeps
-            // everything for hot reload), so local `flutter run` is unaffected.
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
